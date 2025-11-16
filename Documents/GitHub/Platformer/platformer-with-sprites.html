@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Platformer Game - With Sprites</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: monospace;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+        .topbar {
+            background: rgb(16 18 24 / 0.8);
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .hint {
+            background: rgb(16 18 24 / 0.8);
+            padding: 8px 12px;
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+        }
+        #gameCanvas {
+            display: block;
+            border: 2px solid #333;
+            background: linear-gradient(to bottom, #87CEEB 0%, #87CEEB 60%, #98D982 60%, #8B7355 100%);
+        }
+        .loading {
+            color: #fff;
+            text-align: center;
+            padding: 20px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="topbar">
+            <span style="color: #fff;">Platformer</span>
+            <span style="color: #fff;">Level: <span id="level">1</span> | Score: <span id="score">0</span> | Lives: <span id="lives">3</span></span>
+        </div>
+        <canvas id="gameCanvas" width="900" height="450"></canvas>
+        <div class="hint">Arrow Keys to move. Space to jump. R to restart. P to pause.</div>
+    </div>
+
+    <!-- MakkoEngine for sprite animations -->
+    <script src="https://cdn.jsdelivr.net/gh/MakkoEngine/MakkoEngine@latest/dist/makko-engine.min.js"></script>
+    
+    <script>
+        // Simple sprite animation system
+        class SimpleSprite {
+            constructor(config) {
+                this.frames = config.frames;
+                this.frameTime = config.frameTime || 100;
+                this.currentFrame = 0;
+                this.lastFrameTime = 0;
+                this.loop = config.loop !== false;
+                this.width = config.width;
+                this.height = config.height;
+                this.color = config.color || '#fff';
+            }
+
+            update(deltaTime) {
+                this.lastFrameTime += deltaTime;
+                if (this.lastFrameTime >= this.frameTime) {
+                    this.lastFrameTime = 0;
+                    this.currentFrame++;
+                    if (this.currentFrame >= this.frames) {
+                        if (this.loop) {
+                            this.currentFrame = 0;
+                        } else {
+                            this.currentFrame = this.frames - 1;
+                        }
+                    }
+                }
+            }
+
+            draw(ctx, x, y, scale = 1, flipH = false) {
+                ctx.save();
+                ctx.translate(x, y);
+                if (flipH) ctx.scale(-1, 1);
+                ctx.scale(scale, scale);
+                
+                // Draw character representation based on current frame
+                this.drawCharacter(ctx, this.currentFrame);
+                
+                ctx.restore();
+            }
+
+            drawCharacter(ctx, frame) {
+                const w = this.width;
+                const h = this.height;
+                
+                // Draw a simple character that animates
+                ctx.fillStyle = this.color;
+                
+                if (this.color === '#4CAF50') {
+                    // Player character
+                    // Body
+                    ctx.fillRect(w * 0.3, h * 0.4, w * 0.4, h * 0.4);
+                    // Head
+                    ctx.fillRect(w * 0.35, h * 0.15, w * 0.3, h * 0.25);
+                    // Eyes
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(w * 0.38, h * 0.2, w * 0.08, w * 0.08);
+                    ctx.fillRect(w * 0.54, h * 0.2, w * 0.08, w * 0.08);
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(w * 0.4, h * 0.22, w * 0.04, w * 0.04);
+                    ctx.fillRect(w * 0.56, h * 0.22, w * 0.04, w * 0.04);
+                    
+                    // Animated legs
+                    ctx.fillStyle = '#4CAF50';
+                    if (frame === 0) {
+                        // Standing
+                        ctx.fillRect(w * 0.35, h * 0.7, w * 0.12, h * 0.3);
+                        ctx.fillRect(w * 0.53, h * 0.7, w * 0.12, h * 0.3);
+                    } else {
+                        // Walking/Running
+                        const offset = Math.sin(frame * 0.5) * 5;
+                        ctx.fillRect(w * 0.35 + offset, h * 0.7, w * 0.12, h * 0.3);
+                        ctx.fillRect(w * 0.53 - offset, h * 0.7, w * 0.12, h * 0.3);
+                    }
+                } else if (this.color === '#FFD700') {
+                    // Coin
+                    ctx.beginPath();
+                    ctx.arc(w/2, h/2, Math.min(w, h) * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#FFA500';
+                    ctx.beginPath();
+                    ctx.arc(w/2, h/2, Math.min(w, h) * 0.3, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (this.color === '#FF1493') {
+                    // Gem
+                    ctx.beginPath();
+                    ctx.moveTo(w/2, h * 0.1);
+                    ctx.lineTo(w * 0.8, h/2);
+                    ctx.lineTo(w/2, h * 0.9);
+                    ctx.lineTo(w * 0.2, h/2);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = '#FF69B4';
+                    ctx.beginPath();
+                    ctx.moveTo(w/2, h * 0.25);
+                    ctx.lineTo(w * 0.65, h/2);
+                    ctx.lineTo(w/2, h * 0.75);
+                    ctx.lineTo(w * 0.35, h/2);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+        }
+
+        // Game state
+        const gameState = {
+            currentLevel: 0,
+            score: 0,
+            lives: 3,
+            gameOver: false,
+            paused: false
+        };
+
+        // Input
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            if (e.key === ' ') e.preventDefault(); // Prevent page scroll
+        });
+        window.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Camera
+        const camera = { x: 0, y: 0 };
+
+        // Player
+        const player = {
+            x: 50,
+            y: 200,
+            width: 30,
+            height: 40,
+            velocityX: 0,
+            velocityY: 0,
+            speed: 250,
+            jumpPower: 500,
+            gravity: 1500,
+            color: '#4CAF50',
+            onGround: false,
+            doubleJumpAvailable: true,
+            lastJumpTime: 0,
+            jumpCooldown: 200, // milliseconds between jumps
+            sprite: new SimpleSprite({ 
+                frames: 2, 
+                frameTime: 150, 
+                width: 30, 
+                height: 40, 
+                color: '#4CAF50' 
+            })
+        };
+
+        // Collectible sprites
+        const createCoinSprite = () => new SimpleSprite({ 
+            frames: 4, 
+            frameTime: 100, 
+            width: 20, 
+            height: 20, 
+            color: '#FFD700' 
+        });
+
+        const createGemSprite = () => new SimpleSprite({ 
+            frames: 6, 
+            frameTime: 80, 
+            width: 24, 
+            height: 24, 
+            color: '#FF1493' 
+        });
+
+        // Level data
+        const levels = [
+            {
+                name: "Level 1 - Getting Started",
+                platforms: [
+                    { x: 0, y: 426, width: 250, height: 24, color: '#654321' },
+                    { x: 300, y: 370, width: 150, height: 24, color: '#654321' },
+                    { x: 500, y: 310, width: 100, height: 24, color: '#654321' },
+                    { x: 650, y: 250, width: 200, height: 24, color: '#654321' },
+                    { x: 900, y: 200, width: 150, height: 250, color: '#654321' },
+                    // Decorative platforms
+                    { x: 180, y: 320, width: 60, height: 16, color: '#8B4513' },
+                    { x: 420, y: 260, width: 60, height: 16, color: '#8B4513' },
+                    { x: 750, y: 180, width: 80, height: 16, color: '#8B4513' }
+                ],
+                collectibles: [
+                    { x: 350, y: 330, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 530, y: 270, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 730, y: 210, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 980, y: 150, radius: 12, color: '#FF1493', value: 50, sprite: createGemSprite() }
+                ],
+                goal: { x: 950, y: 150, width: 50, height: 50, color: '#FF6B6B' },
+                spawn: { x: 50, y: 350 }
+            },
+            {
+                name: "Level 2 - Wall Jump Challenge",
+                platforms: [
+                    { x: 0, y: 426, width: 200, height: 24, color: '#654321' },
+                    { x: 250, y: 350, width: 30, height: 100, color: '#654321' },
+                    { x: 350, y: 280, width: 30, height: 170, color: '#654321' },
+                    { x: 450, y: 230, width: 150, height: 24, color: '#654321' },
+                    { x: 650, y: 180, width: 30, height: 246, color: '#654321' },
+                    { x: 750, y: 130, width: 200, height: 24, color: '#654321' },
+                    { x: 1000, y: 80, width: 200, height: 370, color: '#654321' },
+                    // Extra platforms
+                    { x: 300, y: 150, width: 80, height: 20, color: '#8B4513' },
+                    { x: 500, y: 100, width: 100, height: 20, color: '#8B4513' }
+                ],
+                collectibles: [
+                    { x: 500, y: 190, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 800, y: 90, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 850, y: 90, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 1050, y: 30, radius: 12, color: '#FF1493', value: 50, sprite: createGemSprite() }
+                ],
+                goal: { x: 1050, y: 30, width: 50, height: 50, color: '#FF6B6B' },
+                spawn: { x: 50, y: 350 }
+            },
+            {
+                name: "Level 3 - Precision Platforming",
+                platforms: [
+                    { x: 0, y: 426, width: 150, height: 24, color: '#654321' },
+                    { x: 180, y: 380, width: 60, height: 16, color: '#8B4513' },
+                    { x: 270, y: 340, width: 60, height: 16, color: '#8B4513' },
+                    { x: 360, y: 300, width: 60, height: 16, color: '#8B4513' },
+                    { x: 450, y: 260, width: 60, height: 16, color: '#8B4513' },
+                    { x: 540, y: 220, width: 60, height: 16, color: '#8B4513' },
+                    { x: 630, y: 180, width: 60, height: 16, color: '#8B4513' },
+                    { x: 720, y: 140, width: 100, height: 16, color: '#8B4513' },
+                    { x: 870, y: 100, width: 300, height: 350, color: '#654321' },
+                    // Bonus platforms
+                    { x: 200, y: 200, width: 80, height: 16, color: '#8B4513' },
+                    { x: 400, y: 150, width: 80, height: 16, color: '#8B4513' }
+                ],
+                collectibles: [
+                    { x: 200, y: 340, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 290, y: 300, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 380, y: 260, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 470, y: 220, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 560, y: 180, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 650, y: 140, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 760, y: 100, radius: 10, color: '#FFD700', value: 10, sprite: createCoinSprite() },
+                    { x: 920, y: 50, radius: 12, color: '#FF1493', value: 50, sprite: createGemSprite() }
+                ],
+                goal: { x: 950, y: 50, width: 50, height: 50, color: '#FF6B6B' },
+                spawn: { x: 50, y: 350 }
+            }
+        ];
+
+        let currentLevel;
+        let lastTime = 0;
+
+        // Helper functions
+        function checkCollision(a, b) {
+            return a.x < b.x + b.width &&
+                   a.x + a.width > b.x &&
+                   a.y < b.y + b.height &&
+                   a.y + a.height > b.y;
+        }
+
+        function checkCircleCollision(rect, circle) {
+            const centerX = circle.x + circle.radius;
+            const centerY = circle.y + circle.radius;
+            const rectCenterX = rect.x + rect.width / 2;
+            const rectCenterY = rect.y + rect.height / 2;
+            
+            const dx = Math.abs(centerX - rectCenterX);
+            const dy = Math.abs(centerY - rectCenterY);
+            
+            if (dx > (rect.width / 2 + circle.radius)) return false;
+            if (dy > (rect.height / 2 + circle.radius)) return false;
+            
+            return true;
+        }
+
+        function updateUI() {
+            document.getElementById('level').textContent = gameState.currentLevel + 1;
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('lives').textContent = gameState.lives;
+        }
+
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                gameState.gameOver = true;
+                return;
+            }
+            
+            currentLevel = levels[levelIndex];
+            player.x = currentLevel.spawn.x;
+            player.y = currentLevel.spawn.y;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            player.lastJumpTime = 0;
+            player.doubleJumpAvailable = true;
+            gameState.currentLevel = levelIndex;
+            updateUI();
+        }
+
+        function updatePlayer(deltaTime) {
+            const dt = deltaTime / 1000;
+            const currentTime = Date.now();
+
+            // Input
+            if (keys['ArrowLeft']) {
+                player.velocityX = -player.speed;
+            } else if (keys['ArrowRight']) {
+                player.velocityX = player.speed;
+            } else {
+                player.velocityX *= 0.85; // Better friction
+            }
+
+            // FIXED: Jump with cooldown to prevent infinite jumping
+            if (keys[' '] && currentTime - player.lastJumpTime > player.jumpCooldown) {
+                if (player.onGround) {
+                    player.velocityY = -player.jumpPower;
+                    player.lastJumpTime = currentTime;
+                    player.doubleJumpAvailable = true;
+                } else if (player.doubleJumpAvailable) {
+                    player.velocityY = -player.jumpPower * 0.8;
+                    player.doubleJumpAvailable = false;
+                    player.lastJumpTime = currentTime;
+                }
+            }
+
+            // Physics
+            player.velocityY += player.gravity * dt;
+            player.velocityY = Math.min(player.velocityY, 800);
+
+            player.x += player.velocityX * dt;
+            player.y += player.velocityY * dt;
+
+            // Collisions
+            player.onGround = false;
+            
+            for (const platform of currentLevel.platforms) {
+                if (checkCollision(player, platform)) {
+                    const overlapX = Math.min(
+                        player.x + player.width - platform.x,
+                        platform.x + platform.width - player.x
+                    );
+                    const overlapY = Math.min(
+                        player.y + player.height - platform.y,
+                        platform.y + platform.height - player.y
+                    );
+
+                    if (overlapX < overlapY) {
+                        if (player.x < platform.x) {
+                            player.x = platform.x - player.width;
+                        } else {
+                            player.x = platform.x + platform.width;
+                        }
+                        player.velocityX = 0;
+                    } else {
+                        if (player.y < platform.y) {
+                            player.y = platform.y - player.height;
+                            player.velocityY = 0;
+                            player.onGround = true;
+                            player.doubleJumpAvailable = true;
+                        } else {
+                            player.y = platform.y + platform.height;
+                            player.velocityY = 0;
+                        }
+                    }
+                }
+            }
+
+            // Collectibles
+            for (let i = currentLevel.collectibles.length - 1; i >= 0; i--) {
+                const collectible = currentLevel.collectibles[i];
+                collectible.sprite.update(deltaTime);
+                
+                if (checkCircleCollision(player, collectible)) {
+                    gameState.score += collectible.value;
+                    currentLevel.collectibles.splice(i, 1);
+                    updateUI();
+                }
+            }
+
+            // Goal
+            if (checkCollision(player, currentLevel.goal)) {
+                loadLevel(gameState.currentLevel + 1);
+            }
+
+            // Fall death
+            if (player.y > canvas.height + 100) {
+                playerDeath();
+            }
+
+            // Update player sprite
+            if (Math.abs(player.velocityX) > 50 || !player.onGround) {
+                player.sprite.update(deltaTime);
+            } else {
+                player.sprite.currentFrame = 0; // Idle pose
+            }
+        }
+
+        function playerDeath() {
+            gameState.lives--;
+            updateUI();
+            
+            if (gameState.lives <= 0) {
+                gameState.gameOver = true;
+            } else {
+                player.x = currentLevel.spawn.x;
+                player.y = currentLevel.spawn.y;
+                player.velocityX = 0;
+                player.velocityY = 0;
+                player.lastJumpTime = 0;
+                player.doubleJumpAvailable = true;
+            }
+        }
+
+        function renderPlatform(platform) {
+            // Main platform
+            ctx.fillStyle = platform.color;
+            ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            
+            // Top grass layer
+            ctx.fillStyle = '#228B22';
+            ctx.fillRect(platform.x, platform.y, platform.width, 4);
+            
+            // Texture
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            for (let i = 0; i < platform.width; i += 20) {
+                ctx.fillRect(platform.x + i, platform.y + 8, 2, platform.height - 8);
+            }
+        }
+
+        function renderGoal(goal) {
+            // Flag pole
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(goal.x + goal.width/2 - 2, goal.y, 4, goal.height);
+            
+            // Flag
+            ctx.fillStyle = goal.color;
+            ctx.beginPath();
+            ctx.moveTo(goal.x + goal.width/2 + 2, goal.y);
+            ctx.lineTo(goal.x + goal.width, goal.y + 15);
+            ctx.lineTo(goal.x + goal.width/2 + 2, goal.y + 30);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function render() {
+            // Clear with sky gradient is now in CSS background
+            
+            // Camera
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+
+            // Keep camera in bounds
+            camera.x = Math.max(0, camera.x);
+            camera.y = Math.max(0, camera.y);
+
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            // Platforms
+            for (const platform of currentLevel.platforms) {
+                renderPlatform(platform);
+            }
+
+            // Collectibles
+            for (const collectible of currentLevel.collectibles) {
+                collectible.sprite.draw(ctx, collectible.x, collectible.y);
+            }
+
+            // Goal
+            renderGoal(currentLevel.goal);
+
+            // Player
+            const facing = player.velocityX > 0 ? false : player.velocityX < 0 ? true : player.facing;
+            player.sprite.draw(ctx, player.x, player.y, 1, facing);
+            player.facing = facing;
+
+            ctx.restore();
+
+            // UI
+            if (gameState.gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 32px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(gameState.lives <= 0 ? 'GAME OVER' : 'YOU WIN!', canvas.width / 2, canvas.height / 2 - 20);
+                ctx.font = '16px monospace';
+                ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 20);
+                ctx.textAlign = 'left';
+            }
+
+            if (gameState.paused && !gameState.gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 32px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+                ctx.font = '16px monospace';
+                ctx.fillText('Press P to resume', canvas.width / 2, canvas.height / 2 + 40);
+                ctx.textAlign = 'left';
+            }
+        }
+
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            if (!gameState.gameOver && !gameState.paused) {
+                updatePlayer(deltaTime);
+            }
+
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Input handlers
+        window.addEventListener('keydown', (e) => {
+            if ((e.key === 'r' || e.key === 'R') && gameState.gameOver) {
+                gameState.currentLevel = 0;
+                gameState.score = 0;
+                gameState.lives = 3;
+                gameState.gameOver = false;
+                loadLevel(0);
+            }
+            
+            if ((e.key === 'p' || e.key === 'P') && !gameState.gameOver) {
+                gameState.paused = !gameState.paused;
+            }
+        });
+
+        // Start game
+        loadLevel(0);
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
